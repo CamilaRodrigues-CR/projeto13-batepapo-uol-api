@@ -35,7 +35,7 @@ const messageSchema = joi.object({
 app.post("/participants", async (req, res) => {
     const { name } = req.body;
 
-    const validation = userSchema.validate(name, { abortEarly: false });
+    const validation = userSchema.validate(req.body, { abortEarly: false });
     if (validation.error) {
         const erros = validation.error.details.map(det => det.message)
         return res.status(422).send(erros)
@@ -44,14 +44,15 @@ app.post("/participants", async (req, res) => {
         const resp = await db.collection("participants").findOne({ name });
         if (resp) return res.sendStatus(409);
 
-        await db.collection("participants").insertOne({ name, lastStatus: Date.now() });
+        const time = Date.now()
+        await db.collection("participants").insertOne({ name, lastStatus:  time});
 
         const message = {
             from: name,
             to: 'Todos',
             text: 'entra na sala...',
             type: 'status',
-            time: dayjs(lastStatus).format("HH:mm:ss")
+            time: dayjs(time).format("HH:mm:ss")
         }
 
         await db.collection("messages").insertOne({ message });
@@ -60,6 +61,7 @@ app.post("/participants", async (req, res) => {
         return res.sendStatus(201);
 
     } catch (err) {
+        console.error(err)
         return res.status(500).send(err);
     }
 
