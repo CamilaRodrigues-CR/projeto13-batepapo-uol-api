@@ -87,7 +87,7 @@ app.post("/messages", async (req, res) => {
         await db.collection("messages").insertOne(message);
         
         return res.sendStatus(201);
-        
+
     } catch (err) {
         return res.status(500).send(err)
     }
@@ -108,6 +108,31 @@ app.get("/participants", async (req, res) => {
 })
 
 
+app.get("/messages", async (req, res) => {
+    const {user} = req.headers;
+    const {limit} = req.query;
+    const limitNumber = Number(limit);
+
+    if (limit !== undefined && (limitNumber <= 0 || isNaN(limitNumber))) return res.sendStatus(422);
+
+    try {
+        const messages = await db.collection("messages").find(
+            {$or: [{from: user}, {to: {$in:["Todos", user]}}, {type: "message"}]}
+        ).limit(limit === undefined ? 0 : limitNumber).sort(({$natural: -1})).toArray();
+
+        res.send(messages)
+
+
+    } catch (error) {
+        console.error(error)
+        res.sendStatus(500)
+
+    }
+})
+
+
+
+// ------------------------------------------- Porta ------------------------------------
 
 const PORT = 5000;
 app.listen(PORT, () => console.log(`server runing on port ${PORT}`));
