@@ -27,7 +27,7 @@ const messageSchema = joi.object({
     from: joi.string().required(),
     to: joi.string().required(),
     text: joi.string().required(),
-    type: joi.string().required().valid("message","private_message")
+    type: joi.string().required().valid("message", "private_message")
 })
 
 // -------------------------------------- Rotas Posts  ----------------------------------
@@ -68,11 +68,11 @@ app.post("/participants", async (req, res) => {
 
 
 app.post("/messages", async (req, res) => {
-    const {to, text, type} = req.body;
-    const {user }= req.headers
+    const { to, text, type } = req.body;
+    const { user } = req.headers
 
 
-    const validation = messageSchema.validate({...req.body , from: user}, { abortEarly: false });
+    const validation = messageSchema.validate({ ...req.body, from: user }, { abortEarly: false });
     if (validation.error) {
         const erros = validation.error.details.map(det => det.message)
         return res.status(422).send(erros)
@@ -81,15 +81,33 @@ app.post("/messages", async (req, res) => {
     try {
         const participante = await db.collection("participants").findOne({ name: user });
         if (!participante) return res.sendStatus(422);
-        
-        const message = {...req.body, from: user, time: dayjs().format("HH:mm:ss")}
+
+        const message = { ...req.body, from: user, time: dayjs().format("HH:mm:ss") }
 
         await db.collection("messages").insertOne(message);
-        
+
         return res.sendStatus(201);
 
     } catch (err) {
         return res.status(500).send(err)
+    }
+})
+
+app.post("/status", async (req, res) => {
+    const { user } = req.headers;
+
+    if (!user) return res.sendStatus(404);
+
+    try {
+        const update = await db.collection("participants").updateOne(
+            { name: user }, { $set: { lastStatus: Date.now() } }
+        )
+
+        return sendStatus(200)
+
+    } catch (err) {
+        return res.status(500).send(err);
+
     }
 })
 
@@ -100,37 +118,66 @@ app.get("/participants", async (req, res) => {
     try {
         const participantes = await db.collection("participants").find().toArray();
         res.send(participantes)
-    } catch (error) {
-        console.error(error)
-        res.sendStatus(500)
+    } catch (err) {
+        return res.status(500).send(err);
 
     }
 })
 
 
 app.get("/messages", async (req, res) => {
-    const {user} = req.headers;
-    const {limit} = req.query;
+    const { user } = req.headers;
+    const { limit } = req.query;
     const limitNumber = Number(limit);
 
     if (limit !== undefined && (limitNumber <= 0 || isNaN(limitNumber))) return res.sendStatus(422);
 
     try {
         const messages = await db.collection("messages").find(
-            {$or: [{from: user}, {to: {$in:["Todos", user]}}, {type: "message"}]}
-        ).limit(limit === undefined ? 0 : limitNumber).sort(({$natural: -1})).toArray();
+            { $or: [{ from: user }, { to: { $in: ["Todos", user] } }, { type: "message" }] }
+        ).limit(limit === undefined ? 0 : limitNumber).sort(({ $natural: -1 })).toArray();
 
         res.send(messages)
 
 
-    } catch (error) {
-        console.error(error)
-        res.sendStatus(500)
+    } catch (err) {
+        return res.status(500).send(err);
 
     }
 })
 
+//-------------------------------------------- Atualização ------------------------------
 
+setInterval(async () => {
+    const inative = Date.now() - 10000;
+
+    try {
+        const inativeUser = await db.collection("participants").find({ lastStatus: { $lt: inative } }).toArray();
+
+        if (inativeUser.lenght > 0) {
+
+            const message = inativeUser.map(inative => {
+                return {
+                    from: inative.name,
+                    to: 'Todos',
+                    text: 'sai da sala...',
+                    type: 'status',
+                    time: dayjs().format('HH:mm:ss')
+                }
+            })
+
+
+            await db.collection("messages").insertMany(message);
+            await db.collection("participants").deleteMany({lastStatus: {$lt: inative}});
+
+        }
+
+
+    } catch (err) {
+        return res.status(500).send(err);
+
+    }
+}, 15000)
 
 // ------------------------------------------- Porta ------------------------------------
 
