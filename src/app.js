@@ -27,13 +27,13 @@ const messageSchema = joi.object({
     from: joi.string().required(),
     to: joi.string().required(),
     text: joi.string().required(),
-    type: joi.string().required()
+    type: joi.string().required().valid("message","private_message")
 })
 
 // -------------------------------------- Rotas Posts  ----------------------------------
 
 app.post("/participants", async (req, res) => {
-    const {name} = req.body;
+    const { name } = req.body;
 
     const validation = userSchema.validate(name, { abortEarly: false });
     if (validation.error) {
@@ -41,24 +41,24 @@ app.post("/participants", async (req, res) => {
         return res.status(422).send(erros)
     }
     try {
-        const resp = await db.collection("participants").findOne({name});
+        const resp = await db.collection("participants").findOne({ name });
         if (resp) return res.sendStatus(409);
 
-        await db.collection("participants").insertOne({name , lastStatus: Date.now()});
+        await db.collection("participants").insertOne({ name, lastStatus: Date.now() });
 
         const message = {
-        from: name,
-		to: 'Todos',
-		text: 'entra na sala...',
-		type: 'status',
-		time: dayjs(lastStatus).format("HH:mm:ss")
+            from: name,
+            to: 'Todos',
+            text: 'entra na sala...',
+            type: 'status',
+            time: dayjs(lastStatus).format("HH:mm:ss")
         }
 
-        await db.collection("messages").insertOne({message});
+        await db.collection("messages").insertOne({ message });
 
 
         return res.sendStatus(201);
-        
+
     } catch (err) {
         return res.status(500).send(err);
     }
@@ -68,26 +68,27 @@ app.post("/participants", async (req, res) => {
 
 
 app.post("/messages", async (req, res) => {
-    const { 
-		from ,
-		to,
-		text,
-		type,
-		time
-} = req.body;
+    const {to, text, type} = req.body;
+    const {user }= req.headers
 
-    const validation = messageSchema.validate(req.body, { abortEarly: false });
+
+    const validation = messageSchema.validate({...req.body , from: user}, { abortEarly: false });
     if (validation.error) {
         const erros = validation.error.details.map(det => det.message)
         return res.status(422).send(erros)
     }
 
     try {
-        const message= await db.collection("messages").insertOne({to, text, type});
-        res.status(201).send(message)
+        const participante = await db.collection("participants").findOne({ name: user });
+        if (!participante) return res.sendStatus(422);
+        
+        const message = {...req.body, from: user, time: dayjs().format("HH:mm:ss")}
 
+        await db.collection("messages").insertOne(message);
+        
+        return res.sendStatus(201);
+        
     } catch (err) {
-      
         return res.status(500).send(err)
     }
 })
